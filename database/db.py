@@ -27,6 +27,16 @@ def get_db():
     return conn
 
 
+def get_user_by_email(email):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT * FROM users WHERE email = ?", (email,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+
 def init_db():
     conn = get_db()
     conn.execute("""
