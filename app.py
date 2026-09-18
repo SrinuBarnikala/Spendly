@@ -77,7 +77,7 @@ def register():
 def login():
     if request.method == "GET":
         if session.get("user_id"):
-            return redirect(url_for("landing"))
+            return redirect(url_for("profile"))
         return render_template("login.html")
 
     email = request.form.get("email", "").strip().lower()
@@ -88,7 +88,8 @@ def login():
         return render_template("login.html", error="Invalid email or password.")
 
     session["user_id"] = user["id"]
-    return redirect(url_for("landing"))
+    session["user_name"] = user["name"]
+    return redirect(url_for("profile"))
 
 
 @app.route("/terms")
@@ -113,7 +114,48 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    return "Profile page — coming in Step 4"
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    user = {
+        "name": "Demo User",
+        "email": "demo@spendly.com",
+        "initials": "DU",
+        "member_since": "March 2025",
+    }
+
+    stats = {
+        "total_spent": "₹11,820.00",
+        "transaction_count": 6,
+        "top_category": "Bills",
+    }
+
+    transactions = [
+        {"date": "2026-09-18", "description": "Groceries", "category": "Food", "amount": "₹1,250.00"},
+        {"date": "2026-09-15", "description": "Cab to airport", "category": "Transport", "amount": "₹980.00"},
+        {"date": "2026-09-10", "description": "Electricity bill", "category": "Bills", "amount": "₹4,500.00"},
+        {"date": "2026-09-08", "description": "Pharmacy", "category": "Health", "amount": "₹760.00"},
+        {"date": "2026-09-05", "description": "Movie night", "category": "Entertainment", "amount": "₹600.00"},
+        {"date": "2026-09-02", "description": "New shoes", "category": "Shopping", "amount": "₹3,230.00"},
+    ]
+
+    categories = [
+        {"category": "Food", "amount": "₹1,250.00", "percent": 16, "width_class": "w-20"},
+        {"category": "Transport", "amount": "₹980.00", "percent": 13, "width_class": "w-10"},
+        {"category": "Bills", "amount": "₹4,500.00", "percent": 30, "width_class": "w-30"},
+        {"category": "Health", "amount": "₹760.00", "percent": 10, "width_class": "w-10"},
+        {"category": "Entertainment", "amount": "₹600.00", "percent": 8, "width_class": "w-10"},
+        {"category": "Shopping", "amount": "₹3,230.00", "percent": 17, "width_class": "w-20"},
+        {"category": "Other", "amount": "₹500.00", "percent": 6, "width_class": "w-10"},
+    ]
+
+    return render_template(
+        "profile.html",
+        user=user,
+        stats=stats,
+        transactions=transactions,
+        categories=categories,
+    )
 
 
 @app.route("/expenses/add")
