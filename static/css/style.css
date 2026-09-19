@@ -538,7 +538,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .profile-container {
-    max-width: 720px;
+    max-width: var(--max-width);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -663,7 +663,7 @@ a { color: inherit; text-decoration: none; }
 .transaction-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
 }
 
 .transaction-table th {

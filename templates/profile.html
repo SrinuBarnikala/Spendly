@@ -2,7 +2,16 @@
 
 {% block title %}Profile — Spendly{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
 {% block content %}
+
+{% macro preset_btn(key, date_from, date_to, label) %}
+<a href="{{ url_for('profile', date_from=date_from, date_to=date_to) }}"
+   class="filter-preset-btn{{ ' filter-preset-active' if filters.active == key else '' }}">{{ label }}</a>
+{% endmacro %}
 
 <section class="profile-page">
     <div class="profile-container">
@@ -18,6 +27,33 @@
                         Member since {{ user.member_since }}
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <div class="profile-block filter-bar">
+            <h2 class="section-title">
+                <i data-lucide="filter" class="section-icon"></i>
+                Filter by date
+            </h2>
+            <div class="profile-card filter-card">
+                <div class="filter-presets">
+                    {{ preset_btn('this_month', filters.this_month.date_from, filters.this_month.date_to, 'This Month') }}
+                    {{ preset_btn('last_3_months', filters.last_3_months.date_from, filters.last_3_months.date_to, 'Last 3 Months') }}
+                    {{ preset_btn('last_6_months', filters.last_6_months.date_from, filters.last_6_months.date_to, 'Last 6 Months') }}
+                    {{ preset_btn('all_time', none, none, 'All Time') }}
+                </div>
+                <form method="GET" action="{{ url_for('profile') }}"
+                      class="filter-custom-form{{ ' filter-custom-active' if filters.active == 'custom' else '' }}">
+                    <div class="filter-field">
+                        <label for="date_from">From</label>
+                        <input type="date" id="date_from" name="date_from" class="form-input filter-date-input" value="{{ filters.date_from or '' }}">
+                    </div>
+                    <div class="filter-field">
+                        <label for="date_to">To</label>
+                        <input type="date" id="date_to" name="date_to" class="form-input filter-date-input" value="{{ filters.date_to or '' }}">
+                    </div>
+                    <button type="submit" class="btn-submit filter-apply-btn">Apply</button>
+                </form>
             </div>
         </div>
 
@@ -45,58 +81,76 @@
             </div>
         </div>
 
-        <div class="profile-block">
-            <h2 class="section-title">
-                <i data-lucide="history" class="section-icon"></i>
-                Recent transactions
-            </h2>
-            <div class="profile-card table-card">
-                <div class="table-scroll">
-                    <table class="transaction-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Description</th>
-                                <th>Category</th>
-                                <th class="col-amount">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for t in transactions %}
-                            <tr>
-                                <td>{{ t.date }}</td>
-                                <td>{{ t.description }}</td>
-                                <td>
-                                    <span class="badge">
-                                        <span class="badge-dot cat-{{ t.category|lower }}"></span>
-                                        {{ t.category }}
-                                    </span>
-                                </td>
-                                <td class="col-amount">{{ t.amount }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <div class="profile-split">
+            <div class="profile-block">
+                <h2 class="section-title">
+                    <i data-lucide="history" class="section-icon"></i>
+                    Recent transactions
+                </h2>
+                <div class="profile-card table-card">
+                    <div class="table-scroll">
+                        <table class="transaction-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Category</th>
+                                    <th class="col-amount">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in transactions %}
+                                <tr>
+                                    <td>{{ t.date }}</td>
+                                    <td>{{ t.description }}</td>
+                                    <td>
+                                        <span class="badge">
+                                            <span class="badge-dot cat-{{ t.category|lower }}"></span>
+                                            {{ t.category }}
+                                        </span>
+                                    </td>
+                                    <td class="col-amount">{{ t.amount }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if pagination.total_pages > 1 %}
+                    {% set filter_args = {'date_from': filters.date_from, 'date_to': filters.date_to} %}
+                    <div class="pagination">
+                        {% if pagination.has_prev %}
+                        <a href="{{ url_for('profile', page=pagination.prev_page, **filter_args) }}" class="pagination-btn">Previous</a>
+                        {% else %}
+                        <span class="pagination-btn pagination-disabled">Previous</span>
+                        {% endif %}
+                        <span class="pagination-info">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+                        {% if pagination.has_next %}
+                        <a href="{{ url_for('profile', page=pagination.next_page, **filter_args) }}" class="pagination-btn">Next</a>
+                        {% else %}
+                        <span class="pagination-btn pagination-disabled">Next</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-        </div>
 
-        <div class="profile-block">
-            <h2 class="section-title">
-                <i data-lucide="pie-chart" class="section-icon"></i>
-                Category breakdown
-            </h2>
-            <div class="profile-card">
-                <div class="mock-bars">
-                    {% for c in categories %}
-                    <div class="mock-bar-row">
-                        <span class="mock-cat">{{ c.category }}</span>
-                        <div class="mock-bar-track">
-                            <div class="mock-bar cat-{{ c.category|lower }} {{ c.width_class }}"></div>
+            <div class="profile-block">
+                <h2 class="section-title">
+                    <i data-lucide="pie-chart" class="section-icon"></i>
+                    Category breakdown
+                </h2>
+                <div class="profile-card">
+                    <div class="mock-bars">
+                        {% for c in categories %}
+                        <div class="mock-bar-row">
+                            <span class="mock-cat">{{ c.category }}</span>
+                            <div class="mock-bar-track">
+                                <div class="mock-bar cat-{{ c.category|lower }} {{ c.width_class }}"></div>
+                            </div>
+                            <span class="mock-amt">{{ c.amount }}</span>
                         </div>
-                        <span class="mock-amt">{{ c.amount }}</span>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
         </div>

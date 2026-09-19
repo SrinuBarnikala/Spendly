@@ -1,6 +1,9 @@
+import calendar
+import math
 import sqlite3
+from datetime import date, datetime
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import get_db, get_user_by_email, init_db, seed_db
@@ -8,13 +11,117 @@ from database.queries import get_user_by_id
 from database.queries import get_recent_transactions
 from database.queries import get_summary_stats
 from database.queries import get_category_breakdown
+from database.queries import get_transaction_count
 
 app = Flask(__name__)
 app.secret_key = "spendly-dev-secret-key"
 
+TRANSACTIONS_PER_PAGE = 10
+
 
 def format_currency(amount):
     return f"₹{amount:,.2f}"
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _months_before(anchor, months):
+    """Returns the date `months` months before `anchor`, clamping the day
+    to the target month's length (e.g. Mar 31 minus 1 month -> Feb 28)."""
+    month_index = anchor.month - 1 - months
+    year = anchor.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(anchor.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _resolve_date_filters(today, date_from_arg, date_to_arg):
+    """Parses/validates date_from & date_to query args into (date_from,
+    date_to, filters) for the profile page, flashing an error and falling
+    back to unfiltered when the range is invalid."""
+    raw_from = _parse_iso_date(date_from_arg)
+    raw_to = _parse_iso_date(date_to_arg)
+
+    if raw_from and raw_to and raw_from > raw_to:
+        flash("Start date must be before end date.", "error")
+        raw_from, raw_to = None, None
+
+    has_range = bool(raw_from and raw_to)
+    date_from = raw_from.isoformat() if has_range else None
+    date_to = raw_to.isoformat() if has_range else None
+
+    this_month_start = today.replace(day=1)
+    this_month_end = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+    last_3_start = _months_before(today, 3)
+    last_6_start = _months_before(today, 6)
+
+    if not has_range:
+        active_preset = "all_time"
+    elif raw_from == this_month_start and raw_to == this_month_end:
+        active_preset = "this_month"
+    elif raw_from == last_3_start and raw_to == today:
+        active_preset = "last_3_months"
+    elif raw_from == last_6_start and raw_to == today:
+        active_preset = "last_6_months"
+    else:
+        active_preset = "custom"
+
+    filters = {
+        "date_from": date_from,
+        "date_to": date_to,
+        "active": active_preset,
+        "this_month": {
+            "date_from": this_month_start.isoformat(),
+            "date_to": this_month_end.isoformat(),
+        },
+        "last_3_months": {
+            "date_from": last_3_start.isoformat(),
+            "date_to": today.isoformat(),
+        },
+        "last_6_months": {
+            "date_from": last_6_start.isoformat(),
+            "date_to": today.isoformat(),
+        },
+    }
+
+    return date_from, date_to, filters
+
+
+def _resolve_pagination(page_arg, total_transactions):
+    """Parses the page query arg and computes (page, offset, pagination)
+    for the profile page's transaction list, clamping to a valid range."""
+    try:
+        page = int((page_arg or "1")[:10])
+    except ValueError:
+        page = 1
+    if page < 1:
+        page = 1
+
+    total_pages = max(1, math.ceil(total_transactions / TRANSACTIONS_PER_PAGE))
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * TRANSACTIONS_PER_PAGE
+
+    def _page_param(p):
+        return None if p == 1 else p
+
+    pagination = {
+        "page": page,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": _page_param(page - 1),
+        "next_page": _page_param(page + 1),
+    }
+
+    return page, offset, pagination
 
 
 # ------------------------------------------------------------------ #
@@ -143,12 +250,21 @@ def profile():
         "member_since": user_row["member_since"],
     }
 
-    raw_stats = get_summary_stats(session["user_id"])
+    date_from, date_to, filters = _resolve_date_filters(
+        date.today(), request.args.get("date_from"), request.args.get("date_to")
+    )
+
+    raw_stats = get_summary_stats(session["user_id"], date_from, date_to)
     stats = {
         "total_spent": format_currency(raw_stats["total_spent"]),
         "transaction_count": raw_stats["transaction_count"],
         "top_category": raw_stats["top_category"],
     }
+
+    total_transactions = get_transaction_count(session["user_id"], date_from, date_to)
+    _, offset, pagination = _resolve_pagination(
+        request.args.get("page"), total_transactions
+    )
 
     transactions = [
         {
@@ -157,11 +273,17 @@ def profile():
             "category": t["category"],
             "amount": format_currency(t["amount"]),
         }
-        for t in get_recent_transactions(session["user_id"])
+        for t in get_recent_transactions(
+            session["user_id"],
+            limit=TRANSACTIONS_PER_PAGE,
+            offset=offset,
+            date_from=date_from,
+            date_to=date_to,
+        )
     ]
 
     categories = []
-    for c in get_category_breakdown(session["user_id"]):
+    for c in get_category_breakdown(session["user_id"], date_from, date_to):
         width = max(10, (c["pct"] // 10) * 10)
         categories.append(
             {
@@ -178,6 +300,8 @@ def profile():
         stats=stats,
         transactions=transactions,
         categories=categories,
+        filters=filters,
+        pagination=pagination,
     )
 
 
