@@ -113,6 +113,8 @@ a { color: inherit; text-decoration: none; }
 
 .nav-user { color: var(--ink) !important; font-weight: 600; }
 
+.nav-active { color: var(--ink) !important; font-weight: 600; }
+
 .nav-cta {
     background: var(--ink) !important;
     color: var(--paper) !important;

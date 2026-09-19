@@ -1,3 +1,7 @@
+.profile-actions {
+    align-items: flex-end;
+}
+
 .profile-split {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -93,6 +97,12 @@
     background: var(--danger-light);
     color: var(--danger);
     border: 1px solid var(--danger);
+}
+
+.flash-success {
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid var(--accent);
 }
 
 .pagination {

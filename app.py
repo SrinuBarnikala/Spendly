@@ -6,12 +6,13 @@ from datetime import date, datetime
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from database.db import get_db, get_user_by_email, init_db, seed_db
+from database.db import CATEGORIES, get_db, get_user_by_email, init_db, seed_db
 from database.queries import get_user_by_id
 from database.queries import get_recent_transactions
 from database.queries import get_summary_stats
 from database.queries import get_category_breakdown
 from database.queries import get_transaction_count
+from database.queries import insert_expense
 
 app = Flask(__name__)
 app.secret_key = "spendly-dev-secret-key"
@@ -122,6 +123,25 @@ def _resolve_pagination(page_arg, total_transactions):
     }
 
     return page, offset, pagination
+
+
+def _validate_expense_form(amount_raw, category, date_raw):
+    """Validates the add-expense form fields, returning an error message,
+    or None if the form is valid."""
+    try:
+        amount = float(amount_raw)
+    except ValueError:
+        return "Please enter a valid amount."
+    if not math.isfinite(amount) or amount <= 0:
+        return "Amount must be greater than 0."
+
+    if category not in CATEGORIES:
+        return "Please select a valid category."
+
+    if _parse_iso_date(date_raw) is None:
+        return "Please enter a valid date."
+
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -305,9 +325,48 @@ def profile():
     )
 
 
-@app.route("/expenses/add")
+@app.route("/analytics")
+def analytics():
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    return render_template("analytics.html")
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        form = {
+            "amount": "",
+            "category": "",
+            "date": date.today().isoformat(),
+            "description": "",
+        }
+        return render_template("add_expense.html", categories=CATEGORIES, form=form)
+
+    amount_raw = request.form.get("amount", "").strip()
+    category = request.form.get("category", "").strip()
+    date_raw = request.form.get("date", "").strip()
+    description_raw = request.form.get("description", "").strip()[:200]
+    form = {
+        "amount": amount_raw,
+        "category": category,
+        "date": date_raw,
+        "description": description_raw,
+    }
+
+    error = _validate_expense_form(amount_raw, category, date_raw)
+    if error:
+        return render_template(
+            "add_expense.html", categories=CATEGORIES, form=form, error=error
+        )
+
+    description = description_raw or None
+    insert_expense(session["user_id"], float(amount_raw), category, date_raw, description)
+    flash("Expense added.", "success")
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/edit")
