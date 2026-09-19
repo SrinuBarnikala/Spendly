@@ -3,7 +3,7 @@ import math
 import sqlite3
 from datetime import date, datetime
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import CATEGORIES, get_db, get_user_by_email, init_db, seed_db
@@ -13,6 +13,8 @@ from database.queries import get_summary_stats
 from database.queries import get_category_breakdown
 from database.queries import get_transaction_count
 from database.queries import insert_expense
+from database.queries import get_expense_by_id
+from database.queries import update_expense
 
 app = Flask(__name__)
 app.secret_key = "spendly-dev-secret-key"
@@ -123,6 +125,16 @@ def _resolve_pagination(page_arg, total_transactions):
     }
 
     return page, offset, pagination
+
+
+def _read_expense_form():
+    """Reads and normalizes expense form fields from the current request."""
+    return {
+        "amount": request.form.get("amount", "").strip(),
+        "category": request.form.get("category", "").strip(),
+        "date": request.form.get("date", "").strip(),
+        "description": request.form.get("description", "").strip()[:200],
+    }
 
 
 def _validate_expense_form(amount_raw, category, date_raw):
@@ -288,6 +300,7 @@ def profile():
 
     transactions = [
         {
+            "id": t["id"],
             "date": t["date"],
             "description": t["description"],
             "category": t["category"],
@@ -346,32 +359,65 @@ def add_expense():
         }
         return render_template("add_expense.html", categories=CATEGORIES, form=form)
 
-    amount_raw = request.form.get("amount", "").strip()
-    category = request.form.get("category", "").strip()
-    date_raw = request.form.get("date", "").strip()
-    description_raw = request.form.get("description", "").strip()[:200]
-    form = {
-        "amount": amount_raw,
-        "category": category,
-        "date": date_raw,
-        "description": description_raw,
-    }
+    form = _read_expense_form()
 
-    error = _validate_expense_form(amount_raw, category, date_raw)
+    error = _validate_expense_form(form["amount"], form["category"], form["date"])
     if error:
         return render_template(
             "add_expense.html", categories=CATEGORIES, form=form, error=error
         )
 
-    description = description_raw or None
-    insert_expense(session["user_id"], float(amount_raw), category, date_raw, description)
+    description = form["description"] or None
+    insert_expense(
+        session["user_id"], float(form["amount"]), form["category"], form["date"], description
+    )
     flash("Expense added.", "success")
     return redirect(url_for("profile"))
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    expense = get_expense_by_id(id, session["user_id"])
+    if expense is None:
+        abort(404)
+
+    if request.method == "GET":
+        form = {
+            "amount": expense["amount"],
+            "category": expense["category"],
+            "date": expense["date"],
+            "description": expense["description"] or "",
+        }
+        return render_template(
+            "edit_expense.html", categories=CATEGORIES, form=form, expense_id=expense["id"]
+        )
+
+    form = _read_expense_form()
+
+    error = _validate_expense_form(form["amount"], form["category"], form["date"])
+    if error:
+        return render_template(
+            "edit_expense.html",
+            categories=CATEGORIES,
+            form=form,
+            expense_id=expense["id"],
+            error=error,
+        )
+
+    description = form["description"] or None
+    update_expense(
+        expense["id"],
+        session["user_id"],
+        float(form["amount"]),
+        form["category"],
+        form["date"],
+        description,
+    )
+    flash("Expense updated.", "success")
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/delete")
