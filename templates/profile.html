@@ -100,6 +100,7 @@
                                     <th>Description</th>
                                     <th>Category</th>
                                     <th class="col-amount">Amount</th>
+                                    <th class="col-actions">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -114,6 +115,11 @@
                                         </span>
                                     </td>
                                     <td class="col-amount">{{ t.amount }}</td>
+                                    <td class="col-actions">
+                                        <a href="{{ url_for('edit_expense', id=t.id) }}" class="row-action" aria-label="Edit expense">
+                                            <i data-lucide="square-pen" class="row-action-icon"></i>
+                                        </a>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

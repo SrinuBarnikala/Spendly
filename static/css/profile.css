@@ -166,3 +166,25 @@
         width: 100%;
     }
 }
+
+.col-actions {
+    text-align: center;
+    width: 1%;
+}
+
+.row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-muted);
+    transition: color 0.15s ease;
+}
+
+.row-action:hover {
+    color: var(--accent);
+}
+
+.row-action-icon {
+    width: 16px;
+    height: 16px;
+}
