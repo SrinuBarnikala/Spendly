@@ -4,9 +4,17 @@ from flask import Flask, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import get_db, get_user_by_email, init_db, seed_db
+from database.queries import get_user_by_id
+from database.queries import get_recent_transactions
+from database.queries import get_summary_stats
+from database.queries import get_category_breakdown
 
 app = Flask(__name__)
 app.secret_key = "spendly-dev-secret-key"
+
+
+def format_currency(amount):
+    return f"₹{amount:,.2f}"
 
 
 # ------------------------------------------------------------------ #
@@ -117,37 +125,52 @@ def profile():
     if not session.get("user_id"):
         return redirect(url_for("login"))
 
+    user_row = get_user_by_id(session["user_id"])
+    if user_row is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    name_parts = user_row["name"].split()
+    if len(name_parts) >= 2:
+        initials = (name_parts[0][0] + name_parts[1][0]).upper()
+    else:
+        initials = user_row["name"][:2].upper()
+
     user = {
-        "name": "Demo User",
-        "email": "demo@spendly.com",
-        "initials": "DU",
-        "member_since": "March 2025",
+        "name": user_row["name"],
+        "email": user_row["email"],
+        "initials": initials,
+        "member_since": user_row["member_since"],
     }
 
+    raw_stats = get_summary_stats(session["user_id"])
     stats = {
-        "total_spent": "₹11,820.00",
-        "transaction_count": 6,
-        "top_category": "Bills",
+        "total_spent": format_currency(raw_stats["total_spent"]),
+        "transaction_count": raw_stats["transaction_count"],
+        "top_category": raw_stats["top_category"],
     }
 
     transactions = [
-        {"date": "2026-09-18", "description": "Groceries", "category": "Food", "amount": "₹1,250.00"},
-        {"date": "2026-09-15", "description": "Cab to airport", "category": "Transport", "amount": "₹980.00"},
-        {"date": "2026-09-10", "description": "Electricity bill", "category": "Bills", "amount": "₹4,500.00"},
-        {"date": "2026-09-08", "description": "Pharmacy", "category": "Health", "amount": "₹760.00"},
-        {"date": "2026-09-05", "description": "Movie night", "category": "Entertainment", "amount": "₹600.00"},
-        {"date": "2026-09-02", "description": "New shoes", "category": "Shopping", "amount": "₹3,230.00"},
+        {
+            "date": t["date"],
+            "description": t["description"],
+            "category": t["category"],
+            "amount": format_currency(t["amount"]),
+        }
+        for t in get_recent_transactions(session["user_id"])
     ]
 
-    categories = [
-        {"category": "Food", "amount": "₹1,250.00", "percent": 16, "width_class": "w-20"},
-        {"category": "Transport", "amount": "₹980.00", "percent": 13, "width_class": "w-10"},
-        {"category": "Bills", "amount": "₹4,500.00", "percent": 30, "width_class": "w-30"},
-        {"category": "Health", "amount": "₹760.00", "percent": 10, "width_class": "w-10"},
-        {"category": "Entertainment", "amount": "₹600.00", "percent": 8, "width_class": "w-10"},
-        {"category": "Shopping", "amount": "₹3,230.00", "percent": 17, "width_class": "w-20"},
-        {"category": "Other", "amount": "₹500.00", "percent": 6, "width_class": "w-10"},
-    ]
+    categories = []
+    for c in get_category_breakdown(session["user_id"]):
+        width = max(10, (c["pct"] // 10) * 10)
+        categories.append(
+            {
+                "category": c["name"],
+                "amount": format_currency(c["amount"]),
+                "percent": c["pct"],
+                "width_class": f"w-{width}",
+            }
+        )
 
     return render_template(
         "profile.html",
