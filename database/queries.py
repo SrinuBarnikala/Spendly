@@ -7,7 +7,7 @@ def get_user_by_id(user_id):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT id, name, email, created_at FROM users WHERE id = ?", (user_id,)
+            "SELECT id, name, email, created_at FROM users WHERE id = ?", [user_id]
         ).fetchone()
     finally:
         conn.close()
@@ -23,13 +23,20 @@ def get_user_by_id(user_id):
     }
 
 
-def get_recent_transactions(user_id, limit=10):
+def _date_range_clause(date_from, date_to):
+    if date_from and date_to:
+        return " AND date BETWEEN ? AND ?", [date_from, date_to]
+    return "", []
+
+
+def get_recent_transactions(user_id, limit=10, offset=0, date_from=None, date_to=None):
     conn = get_db()
     try:
+        clause, extra = _date_range_clause(date_from, date_to)
         rows = conn.execute(
             "SELECT date, description, category, amount FROM expenses "
-            "WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT ?",
-            (user_id, limit),
+            "WHERE user_id = ?" + clause + " ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+            [user_id, *extra, limit, offset],
         ).fetchall()
     finally:
         conn.close()
@@ -45,19 +52,34 @@ def get_recent_transactions(user_id, limit=10):
     ]
 
 
-def get_summary_stats(user_id):
+def get_transaction_count(user_id, date_from=None, date_to=None):
     conn = get_db()
     try:
+        clause, extra = _date_range_clause(date_from, date_to)
+        row = conn.execute(
+            "SELECT COUNT(*) AS count FROM expenses WHERE user_id = ?" + clause,
+            [user_id, *extra],
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return row["count"]
+
+
+def get_summary_stats(user_id, date_from=None, date_to=None):
+    conn = get_db()
+    try:
+        clause, extra = _date_range_clause(date_from, date_to)
         totals_row = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count "
-            "FROM expenses WHERE user_id = ?",
-            (user_id,),
+            "FROM expenses WHERE user_id = ?" + clause,
+            [user_id, *extra],
         ).fetchone()
 
         top_row = conn.execute(
-            "SELECT category FROM expenses WHERE user_id = ? "
-            "GROUP BY category ORDER BY SUM(amount) DESC LIMIT 1",
-            (user_id,),
+            "SELECT category FROM expenses WHERE user_id = ?" + clause
+            + " GROUP BY category ORDER BY SUM(amount) DESC LIMIT 1",
+            [user_id, *extra],
         ).fetchone()
     finally:
         conn.close()
@@ -71,13 +93,14 @@ def get_summary_stats(user_id):
     }
 
 
-def get_category_breakdown(user_id):
+def get_category_breakdown(user_id, date_from=None, date_to=None):
     conn = get_db()
     try:
+        clause, extra = _date_range_clause(date_from, date_to)
         rows = conn.execute(
             "SELECT category, SUM(amount) AS amount FROM expenses "
-            "WHERE user_id = ? GROUP BY category ORDER BY amount DESC",
-            (user_id,),
+            "WHERE user_id = ?" + clause + " GROUP BY category ORDER BY amount DESC",
+            [user_id, *extra],
         ).fetchall()
     finally:
         conn.close()
