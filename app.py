@@ -1,5 +1,6 @@
 import calendar
 import math
+import os
 import sqlite3
 from datetime import date, datetime
 
@@ -439,4 +440,6 @@ if __name__ == "__main__":
     with app.app_context():
         init_db()
         seed_db()
-    app.run(debug=True, port=5001)
+    port = int(os.environ.get("PORT", 5001))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug)
