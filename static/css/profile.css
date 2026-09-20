@@ -188,3 +188,19 @@
     width: 16px;
     height: 16px;
 }
+
+.btn-delete {
+    border: none;
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    margin-left: 0.5rem;
+}
+
+.btn-delete:hover {
+    background: var(--danger);
+    color: var(--paper);
+}
